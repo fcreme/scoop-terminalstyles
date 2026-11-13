@@ -40,7 +40,7 @@ jobs:
           $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'User') + ';' + $env:PSModulePath
           $check = @'
             $m = Import-Module TerminalStyles -DisableNameChecking -PassThru
-            $kind = & $m { if (Get-Command Get-TerminalStylesInstallKind -ErrorAction SilentlyContinue) { Get-TerminalStylesInstallKind } }
+            $kind = & $m { if (Get-Command Get-PackageManagerMarker -ErrorAction SilentlyContinue) { Get-TerminalStylesInstallKind } }
             if ($kind -and $kind -ne 'Scoop') { throw "install kind is '$kind', not Scoop" }
             "$($PSVersionTable.PSVersion): version $($m.Version) from $($m.ModuleBase), install kind: $(if ($kind) { $kind } else { 'n/a (release predates package-manager detection)' })"
           '@
