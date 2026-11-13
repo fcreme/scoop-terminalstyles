@@ -1,0 +1,56 @@
+name: Install test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+
+jobs:
+  install:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install Scoop
+        shell: pwsh
+        run: |
+          Invoke-RestMethod get.scoop.sh -OutFile "$env:RUNNER_TEMP\install-scoop.ps1"
+          & "$env:RUNNER_TEMP\install-scoop.ps1" -RunAsAdmin
+          "$env:USERPROFILE\scoop\shims" | Out-File $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Install from this manifest
+        shell: pwsh
+        run: scoop install .\bucket\terminalstyles.json
+
+      - name: Marker, module path, and both engines
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $marker = "$env:USERPROFILE\scoop\modules\TerminalStyles\.package-manager"
+          if ((Get-Content -Raw $marker).Trim() -ne 'scoop') { throw "marker at $marker does not say scoop" }
+          # A new shell reads PSModulePath from the registry; this step's
+          # environment predates the install, so take the user value from there.
+          $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'User') + ';' + $env:PSModulePath
+          $check = @'
+            $m = Import-Module TerminalStyles -DisableNameChecking -PassThru
+            $kind = & $m { if (Get-Command Get-TerminalStylesInstallKind -ErrorAction SilentlyContinue) { Get-TerminalStylesInstallKind } }
+            if ($kind -and $kind -ne 'Scoop') { throw "install kind is '$kind', not Scoop" }
+            "$($PSVersionTable.PSVersion): version $($m.Version) from $($m.ModuleBase), install kind: $(if ($kind) { $kind } else { 'n/a (release predates package-manager detection)' })"
+          '@
+          pwsh -NoProfile -NonInteractive -Command $check
+          if ($LASTEXITCODE) { throw "pwsh check failed" }
+          powershell -NoProfile -NonInteractive -Command $check
+          if ($LASTEXITCODE) { throw "Windows PowerShell 5.1 check failed" }
+
+      - name: Uninstall
+        shell: pwsh
+        run: |
+          scoop uninstall terminalstyles
+          if (Test-Path "$env:USERPROFILE\scoop\modules\TerminalStyles") { throw 'module link left behind' }
