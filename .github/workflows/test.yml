@@ -38,10 +38,13 @@ jobs:
           # A new shell reads PSModulePath from the registry; this step's
           # environment predates the install, so take the user value from there.
           $env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'User') + ';' + $env:PSModulePath
+          $env:WANT = (Get-Content -Raw .\bucket\terminalstyles.json | ConvertFrom-Json).version
           $check = @'
             $m = Import-Module TerminalStyles -DisableNameChecking -PassThru
+            if ($m.Version.ToString() -ne $env:WANT) { throw "installed $($m.Version), but the manifest names $env:WANT" }
             $kind = & $m { if (Get-Command Get-PackageManagerMarker -ErrorAction SilentlyContinue) { Get-TerminalStylesInstallKind } }
-            if ($kind -and $kind -ne 'Scoop') { throw "install kind is '$kind', not Scoop" }
+            # 0.9.8 is the first release that reads the marker.
+            if ($m.Version -gt [version]'0.9.7' -and $kind -ne 'Scoop') { throw "install kind is '$kind', not Scoop" }
             "$($PSVersionTable.PSVersion): version $($m.Version) from $($m.ModuleBase), install kind: $(if ($kind) { $kind } else { 'n/a (release predates package-manager detection)' })"
           '@
           pwsh -NoProfile -NonInteractive -Command $check
